@@ -172,7 +172,7 @@ class Contract(gl.Contract):
                 except Exception as e:
                     evidence_dump += f"\n\n=== {src} ===\n[Unable to fetch: {str(e)[:100]}]"
             
-            prompt = f\"\"\"
+            prompt = f"""
 You are an AI fact-checker for TruthLens, a decentralized social network.
 Your job is to assess whether the following claim is TRUE, FALSE, MISLEADING, an OPINION, or UNVERIFIABLE.
 
@@ -198,7 +198,7 @@ Return STRICT JSON with EXACTLY this schema:
 }}
 
 Be CONSERVATIVE: when in doubt, prefer UNVERIFIABLE over FALSE. Reserve FALSE only for claims clearly contradicted by evidence.
-\"\"\".strip()
+""".strip()
             
             raw_verdict = gl.nondet.exec_prompt(prompt, response_format="json")
             return normalize_verdict(raw_verdict)
