@@ -3,9 +3,12 @@ import { studionet } from "genlayer-js/chains";
 
 let _client: ReturnType<typeof createClient> | null = null;
 
-export const CONTRACT_ADDRESS = (process.env
-  .NEXT_PUBLIC_CONTRACT_ADDRESS ||
-  "0x553dF22e2bBCcEABb2D83d9F0b0FFAbBB7b559A7") as `0x${string}`;
+const envAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
+export const CONTRACT_ADDRESS = (
+  envAddress && envAddress !== "undefined" && envAddress !== "null"
+    ? envAddress
+    : "0x553dF22e2bBCcEABb2D83d9F0b0FFAbBB7b559A7"
+) as `0x${string}`;
 
 export function getClient(): ReturnType<typeof createClient> {
   if (typeof window === "undefined") {
@@ -33,7 +36,9 @@ export function getClient(): ReturnType<typeof createClient> {
 export function getAccount(): `0x${string}` | undefined {
   if (typeof window === "undefined") return undefined;
   const w = window as any;
-  return w.ethereum?.selectedAddress ?? undefined;
+  const addr = w.ethereum?.selectedAddress;
+  if (!addr || addr === "undefined" || addr === "null") return undefined;
+  return addr as `0x${string}`;
 }
 
 export async function connectWallet(): Promise<`0x${string}`> {
@@ -66,6 +71,9 @@ export async function connectWallet(): Promise<`0x${string}`> {
     }
   }
   const accounts = await w.ethereum.request({ method: "eth_requestAccounts" });
+  if (!accounts || accounts.length === 0 || !accounts[0] || accounts[0] === "undefined" || accounts[0] === "null") {
+    throw new Error("No valid account connected.");
+  }
   getClient(); // re-init client with provider
   return accounts[0] as `0x${string}`;
 }
@@ -74,8 +82,8 @@ export async function readContract(
   method: string,
   args: any[] = []
 ): Promise<unknown> {
-  if (!CONTRACT_ADDRESS) {
-    throw new Error("Contract address not set in NEXT_PUBLIC_CONTRACT_ADDRESS");
+  if (!CONTRACT_ADDRESS || (CONTRACT_ADDRESS as string) === "undefined" || (CONTRACT_ADDRESS as string) === "null") {
+    throw new Error("Contract address not set or is invalid");
   }
   const client = getClient();
   return (client as any).readContract({
@@ -87,17 +95,24 @@ export async function readContract(
 
 export async function writeContract(
   method: string,
-  args: any[] = []
+  args: any[] = [],
+  account?: string
 ): Promise<unknown> {
-  if (!CONTRACT_ADDRESS) {
-    throw new Error("Contract address not set in NEXT_PUBLIC_CONTRACT_ADDRESS");
+  if (!CONTRACT_ADDRESS || (CONTRACT_ADDRESS as string) === "undefined" || (CONTRACT_ADDRESS as string) === "null") {
+    throw new Error("Contract address not set or is invalid");
   }
   const client = getClient();
-  const account = getAccount();
-  return (client as any).writeContract({
+  const activeAccount = account || getAccount();
+  
+  const options: any = {
     address: CONTRACT_ADDRESS,
     functionName: method,
     args,
-    account,
-  });
+  };
+  
+  if (activeAccount && activeAccount !== "undefined" && activeAccount !== "null") {
+    options.account = activeAccount;
+  }
+  
+  return (client as any).writeContract(options);
 }

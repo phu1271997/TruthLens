@@ -5,7 +5,7 @@ import { readContract, writeContract, connectWallet, getAccount } from "./genlay
 interface TruthStore {
   posts: Post[];
   balance: number;
-  address: string;
+  address: string; // Will store the full connected address
   isConnected: boolean;
   isConnecting: boolean;
   isClaiming: boolean;
@@ -44,7 +44,11 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
     set({ isConnecting: true });
     try {
       const addr = await connectWallet();
-      set({ address: shortAddr(addr), isConnected: true });
+      if (!addr || (addr as string) === "undefined" || (addr as string) === "null") {
+        throw new Error("No valid account returned from wallet.");
+      }
+      // Store the full address instead of the shortened one
+      set({ address: addr, isConnected: true });
       await get().fetchBalance(addr);
 
       // Try to claim starter tokens automatically if balance is 0 on first connect
@@ -52,7 +56,7 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
       const bal = raw ? Number(raw) : 0;
       if (bal === 0) {
         try {
-          await writeContract("claim_starter_tokens", []);
+          await writeContract("claim_starter_tokens", [], addr);
           await get().fetchBalance(addr);
         } catch {
           // Already claimed or failed silently
@@ -66,6 +70,7 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
   },
 
   fetchBalance: async (address: string) => {
+    if (!address || address === "undefined" || address === "null") return;
     try {
       const raw = await readContract("get_balance", [address]);
       set({ balance: Number(raw) });
@@ -76,13 +81,13 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
 
   claimTokens: async () => {
     const { address, isConnected } = get();
-    if (!isConnected || !address) {
+    if (!isConnected || !address || address === "undefined" || address === "null") {
       alert("Please connect your wallet first.");
       return;
     }
     set({ isClaiming: true });
     try {
-      await writeContract("claim_starter_tokens", []);
+      await writeContract("claim_starter_tokens", [], address);
       // Re-fetch balance
       await get().fetchBalance(address);
     } catch (err: any) {
@@ -95,8 +100,11 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
 
   addPost: async (content: string) => {
     const postId = `post_${Date.now()}`;
-    const addr = getAccount() || "0xUser...123";
-    const shortAddress = get().address || shortAddr(addr);
+    let addr = getAccount() || get().address || "0xUser...123";
+    if (addr === "undefined" || addr === "null") {
+      addr = "0xUser...123";
+    }
+    const shortAddress = shortAddr(addr);
 
     // Optimistic UI update
     const optimistic: Post = {
@@ -118,7 +126,7 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
 
     // On-chain write
     try {
-      await writeContract("create_post", [content, postId]);
+      await writeContract("create_post", [content, postId], get().address);
     } catch (err: any) {
       console.error("create_post error:", err);
       // Revert optimistic update on error
@@ -130,8 +138,13 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
   },
 
   verifyPost: async (id: string) => {
+    const { address } = get();
+    if (!address || address === "undefined" || address === "null") {
+      alert("Please connect your wallet first.");
+      return;
+    }
     try {
-      const result = await writeContract("verify_post", [id]);
+      const result = await writeContract("verify_post", [id], address);
       let parsed: any = null;
       if (typeof result === "string") {
         try {
@@ -182,7 +195,7 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
 
   appealPost: async (id: string) => {
     const { address, isConnected } = get();
-    if (!isConnected || !address) {
+    if (!isConnected || !address || address === "undefined" || address === "null") {
       alert("Please connect your wallet first.");
       return;
     }
@@ -193,7 +206,7 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
     }));
 
     try {
-      const result = await writeContract("appeal_verdict", [id]);
+      const result = await writeContract("appeal_verdict", [id], address);
       let parsed: any = null;
       if (typeof result === "string") {
         try {

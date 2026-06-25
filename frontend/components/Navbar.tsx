@@ -65,7 +65,11 @@ export function Navbar() {
                   {balance} TRUTH
                 </div>
                 <div className="w-px h-4 bg-slate-700 mx-1" />
-                <div className="text-xs text-slate-400 font-mono">{address}</div>
+                <div className="text-xs text-slate-400 font-mono">
+                  {address && address.length > 10
+                    ? address.slice(0, 6) + "..." + address.slice(-4)
+                    : address}
+                </div>
               </div>
             </div>
           ) : (
