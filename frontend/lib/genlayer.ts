@@ -93,9 +93,11 @@ export async function writeContract(
     throw new Error("Contract address not set in NEXT_PUBLIC_CONTRACT_ADDRESS");
   }
   const client = getClient();
+  const account = getAccount();
   return (client as any).writeContract({
     address: CONTRACT_ADDRESS,
     functionName: method,
     args,
+    account,
   });
 }
