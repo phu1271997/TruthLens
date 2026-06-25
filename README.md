@@ -59,6 +59,21 @@ To deploy the contracts to GenLayer Studio:
 7. Call `create_post(content, post_id)` to stake and post
 8. Call `verify_post(post_id)` to trigger the AI Jury and see the on-chain verdict
 
+## Faucet & Token Replenishment
+To resolve onboarding friction and make evaluation seamless:
+- A highly visible **Claim Faucet** button is integrated into the navigation bar.
+- If a user has insufficient tokens to post, an inline call-to-action banner is displayed to easily claim `100 TRUTH` directly in-context.
+- The Intelligent Contract (`claim_starter_tokens`) supports replenishment: users can reclaim tokens as long as their balance is $\le 5$ `TRUTH`.
+
+## Decentralized Appeal / Dispute Flow (Unicorn Milestone)
+If a post is flagged as `FALSE` or `MISLEADING` by the initial AI consensus, users can challenge the verdict:
+1. **Stake to Appeal:** Disputing a verdict requires staking `5 TRUTH` tokens to prevent spam.
+2. **Supreme AI Jury:** The appeal triggers the `appeal_verdict` method, spinning up a larger, high-scrutiny AI Jury that crawls 4 authoritative sources (Reuters, AP, Wikipedia, BBC) in parallel.
+3. **Consensus Resolution:** Consensus is achieved via GenLayer's `gl.eq_principle.prompt_comparative` to check semantic equivalence.
+4. **Economic Settlement:**
+   - **Overturned (TRUE):** The post status updates to `VERIFIED`. The appealer is refunded their `5 TRUTH` stake + `2 TRUTH` reward. The author is refunded their original `1 TRUTH` stake + `2 TRUTH` reward.
+   - **Upheld (FALSE/MISLEADING):** The status remains `FLAGGED`. The appealer's `5 TRUTH` stake is burned.
+
 ## Hackathon Submission
 Built for the **GenLayer Foundation Hackathon**.
 

@@ -1,4 +1,4 @@
-export type Verdict = "PENDING" | "TRUE" | "FALSE" | "MISLEADING" | "OPINION";
+export type Verdict = "PENDING" | "TRUE" | "FALSE" | "MISLEADING" | "OPINION" | "APPEALED";
 
 export interface Post {
   id: string;
@@ -14,6 +14,14 @@ export interface Post {
   stake_locked: number;
   reward_paid: number;
   createdAt: number;
+  
+  // Appeal fields
+  is_appealed?: boolean;
+  appeal_verdict?: string;
+  appeal_confidence?: number;
+  appeal_reasoning?: string;
+  appeal_evidence_urls?: string[];
+  appeal_stake_locked?: number;
 }
 
 export const MOCK_POSTS: Post[] = [

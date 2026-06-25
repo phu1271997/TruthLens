@@ -76,16 +76,18 @@ class Contract(gl.Contract):
 
     @gl.public.write
     def claim_starter_tokens(self) -> str:
-        """New users claim 100 TRUTH to get started. One-time per address."""
+        """Claim 100 TRUTH to get started or replenish if balance is low (<= 5 TRUTH)."""
         sender = str(gl.message.sender_address)
         current_balance = self.balances.get(sender, u256(0))
-        if current_balance > u256(0):
-            raise gl.vm.UserError("Already claimed starter tokens")
+        if current_balance > u256(5):
+            raise gl.vm.UserError("Balance is sufficient, no need to claim Faucet")
+        
+        added_amount = self.initial_grant - current_balance
         self.balances[sender] = self.initial_grant
-        self.total_supply = self.total_supply + self.initial_grant
+        self.total_supply = self.total_supply + added_amount
         return json.dumps({
             "status": "granted",
-            "amount": int(self.initial_grant),
+            "amount": int(added_amount),
             "balance": int(self.initial_grant),
         })
 
@@ -137,8 +139,8 @@ class Contract(gl.Contract):
     @gl.public.write
     def verify_post(self, post_id: str) -> str:
         """
-        Triggers AI Jury to fact-check this post.
-        AI reads multiple authoritative sources and returns verdict.
+        Triggers AI Jury to fact-check this post using GenLayer's Equivalence Principle (prompt_comparative).
+        AI reads multiple authoritative sources and returns a verdict.
         """
         post_raw = self.posts.get(post_id, "")
         if post_raw == "":
@@ -159,15 +161,11 @@ class Contract(gl.Contract):
             "https://www.bbc.com/news",
         ]
         
-        def leader_fn():
-            # Fetch authoritative sources in parallel via web.render
-            # In production, AI Jury would use semantic search across these
-            # For demo, we simulate by feeding their general content
+        def check_claim_nondet():
             evidence_dump = ""
             for src in sources[:2]:  # Limit to 2 to save tokens in demo
                 try:
                     snippet = gl.nondet.web.render(src, mode="text")
-                    # Truncate to keep prompt manageable
                     evidence_dump += f"\n\n=== {src} ===\n{snippet[:1500]}"
                 except Exception as e:
                     evidence_dump += f"\n\n=== {src} ===\n[Unable to fetch: {str(e)[:100]}]"
@@ -203,12 +201,17 @@ Be CONSERVATIVE: when in doubt, prefer UNVERIFIABLE over FALSE. Reserve FALSE on
             raw_verdict = gl.nondet.exec_prompt(prompt, response_format="json")
             return normalize_verdict(raw_verdict)
         
-        def validator_fn(leader_result) -> bool:
-            if not isinstance(leader_result, gl.vm.Return):
-                return False
-            return verdict_is_valid(leader_result.calldata, leader_result.calldata)
-        
-        verdict = gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
+        comparison_principle = """
+Compare these two fact-checking results from different validators.
+They are equivalent if and only if they agree on the core "verdict" category.
+The allowed verdicts are: "TRUE", "FALSE", "MISLEADING", "OPINION", "UNVERIFIABLE".
+Two results are equivalent if they both classify the claim under the same verdict, even if their confidence score differs by up to 20 points, or if their detailed reasoning is phrased differently.
+If one is "FALSE" and the other is "MISLEADING", they are NOT equivalent.
+Output a JSON: {"equivalent": true} or {"equivalent": false}.
+""".strip()
+
+        # Run semantic consensus
+        verdict = gl.eq_principle.prompt_comparative(check_claim_nondet, comparison_principle)
         
         # Apply economic consequences based on verdict
         stake_locked = u256(int(post["stake_locked"]))
@@ -255,6 +258,139 @@ Be CONSERVATIVE: when in doubt, prefer UNVERIFIABLE over FALSE. Reserve FALSE on
             "verdict": verdict,
             "reward_paid": int(reward_amount),
             "burned": int(burned_amount),
+            "author_balance": int(self.balances.get(author, u256(0))),
+        })
+
+    @gl.public.write
+    def appeal_verdict(self, post_id: str) -> str:
+        """
+        Allows the author or any user to appeal a FLAGGED post.
+        Requires staking 5 TRUTH. A high-scrutiny AI Jury will perform a deep forensic factcheck.
+        """
+        post_raw = self.posts.get(post_id, "")
+        if post_raw == "":
+            raise gl.vm.UserError("Unknown post_id")
+        
+        post = json.loads(post_raw)
+        if post["status"] != "FLAGGED":
+            raise gl.vm.UserError("Only FLAGGED posts can be appealed")
+        if post.get("is_appealed", False):
+            raise gl.vm.UserError("Post has already been appealed")
+        
+        sender = str(gl.message.sender_address)
+        appeal_stake = u256(5)
+        
+        balance = self.balances.get(sender, u256(0))
+        if balance < appeal_stake:
+            raise gl.vm.UserError("Insufficient TRUTH balance to appeal (5 TRUTH required)")
+        
+        # Deduct appeal stake
+        self.balances[sender] = balance - appeal_stake
+        
+        content = str(post["content"])
+        author = str(post["author"])
+        
+        # Comprehensive list of 4 authoritative sources for appeal
+        sources = [
+            "https://www.reuters.com",
+            "https://apnews.com",
+            "https://en.wikipedia.org",
+            "https://www.bbc.com/news",
+        ]
+        
+        def forensic_check_nondet():
+            evidence_dump = ""
+            # Appeal uses all 4 sources for a deeper factcheck
+            for src in sources:
+                try:
+                    snippet = gl.nondet.web.render(src, mode="text")
+                    evidence_dump += f"\n\n=== {src} ===\n{snippet[:1500]}"
+                except Exception as e:
+                    evidence_dump += f"\n\n=== {src} ===\n[Unable to fetch: {str(e)[:100]}]"
+            
+            prompt = f"""
+You are the Supreme AI Jury for TruthLens, an elite decentralized fact-checking network.
+A user has appealed a previous FLAGGED (FALSE/MISLEADING) verdict for the following claim.
+Your job is to conduct an exhaustive, highly critical, and forensic analysis to determine the absolute truth.
+
+CLAIM TO VERIFY:
+\"\"\"{content}\"\"\"
+
+EXTENSIVE WEB EVIDENCE COLLECTED:
+{evidence_dump}
+
+CLASSIFICATION RULES:
+- TRUE: claim is fully supported by the authoritative evidence.
+- FALSE: claim is clearly contradicted by the evidence or fabricated.
+- MISLEADING: contains partial truth but is framed to deceive.
+- OPINION: purely subjective value judgment or preference.
+- UNVERIFIABLE: insufficient evidence to confidently prove or disprove.
+
+Return STRICT JSON with EXACTLY this schema:
+{{
+  "verdict": "TRUE" | "FALSE" | "MISLEADING" | "OPINION" | "UNVERIFIABLE",
+  "confidence": integer 0-100,
+  "evidence_urls": [array of source URLs you used],
+  "reasoning": "detailed forensic explanation justifying why you uphold or overturn the previous verdict"
+}}
+""".strip()
+            
+            raw_verdict = gl.nondet.exec_prompt(prompt, response_format="json")
+            return normalize_verdict(raw_verdict)
+        
+        comparison_principle = """
+Compare these forensic appeal fact-checking results.
+They are equivalent if they agree on the core "verdict" category.
+The allowed verdicts are: "TRUE", "FALSE", "MISLEADING", "OPINION", "UNVERIFIABLE".
+Output a JSON: {"equivalent": true} or {"equivalent": false}.
+""".strip()
+
+        # Run semantic consensus
+        verdict = gl.eq_principle.prompt_comparative(forensic_check_nondet, comparison_principle)
+        
+        # Process appeal outcome
+        original_stake = u256(int(post["stake_locked"]))
+        
+        if verdict["verdict"] == "TRUE" and verdict["confidence"] >= 80:
+            # Overturn success! Post is verified
+            # Refund appealer their 5 TRUTH stake + 2 TRUTH reward
+            # Refund author their original 1 TRUTH stake + 2 TRUTH reward (total 3 TRUTH)
+            self.balances[sender] = self.balances.get(sender, u256(0)) + appeal_stake + u256(2)
+            self.balances[author] = self.balances.get(author, u256(0)) + original_stake + u256(2)
+            self.total_supply = self.total_supply + u256(4) # 2 for author, 2 for appealer minted
+            post["status"] = "VERIFIED"
+            post["reward_paid"] = int(original_stake + u256(2))
+        else:
+            # Appeal failed! The original FLAGGED/OPINION status is upheld, or updated to the new verdict.
+            # The 5 TRUTH appeal stake is burned.
+            self.total_supply = self.total_supply - appeal_stake
+            # Status remains FLAGGED (or becomes what the new verdict is)
+            if verdict["verdict"] in ["FALSE", "MISLEADING"]:
+                post["status"] = "FLAGGED"
+            elif verdict["verdict"] == "OPINION":
+                post["status"] = "OPINION"
+            else:
+                post["status"] = "FLAGGED"
+        
+        # Update post state
+        post["is_appealed"] = True
+        post["appeal_verdict"] = verdict["verdict"]
+        post["appeal_confidence"] = verdict["confidence"]
+        post["appeal_reasoning"] = verdict["reasoning"]
+        post["appeal_evidence_urls"] = verdict["evidence_urls"]
+        post["appeal_stake_locked"] = int(appeal_stake)
+        post["verdict"] = verdict["verdict"] # Update main verdict to the appeal result
+        post["confidence"] = verdict["confidence"]
+        post["reasoning"] = f"[APPEAL RESOLVED] {verdict['reasoning']}"
+        post["evidence_urls"] = verdict["evidence_urls"]
+        
+        self.posts[post_id] = json.dumps(post, sort_keys=True)
+        
+        return json.dumps({
+            "status": post["status"],
+            "post_id": post_id,
+            "verdict": verdict,
+            "appealer_balance": int(self.balances.get(sender, u256(0))),
             "author_balance": int(self.balances.get(author, u256(0))),
         })
 

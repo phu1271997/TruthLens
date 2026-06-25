@@ -19,6 +19,15 @@ export function TruthBadge({ status, confidence }: TruthBadgeProps) {
     );
   }
 
+  if (status === "APPEALED") {
+    return (
+      <Badge variant="outline" className="bg-purple-950/40 text-purple-400 border-purple-500/30 flex items-center gap-1 px-2 py-0.5 shadow-[0_0_10px_rgba(168,85,247,0.25)]">
+        <Clock className="w-3.5 h-3.5 animate-spin" />
+        APPEAL IN PROGRESS
+      </Badge>
+    );
+  }
+
   if (status === "TRUE") {
     return (
       <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1 px-2 py-0.5 shadow-[0_0_10px_rgba(16,185,129,0.2)]">

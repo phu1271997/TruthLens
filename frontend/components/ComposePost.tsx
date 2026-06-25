@@ -9,7 +9,7 @@ import { Coins, Send, Loader2 } from "lucide-react";
 export function ComposePost() {
   const [content, setContent] = useState("");
   const [isPosting, setIsPosting] = useState(false);
-  const { balance, addPost, isConnected, connect } = useTruthStore();
+  const { balance, addPost, isConnected, connect, claimTokens, isClaiming } = useTruthStore();
   const stakeAmount = 1;
 
   const handleSubmit = async () => {
@@ -80,9 +80,21 @@ export function ComposePost() {
           </div>
 
           {isConnected && balance < stakeAmount && (
-            <p className="text-red-400 text-xs mt-2">
-              Insufficient TRUTH balance to post.
-            </p>
+            <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center justify-between gap-3 text-red-400 text-xs">
+              <span>Insufficient TRUTH balance to post (requires 1 TRUTH, you have {balance}).</span>
+              <Button
+                size="sm"
+                onClick={claimTokens}
+                disabled={isClaiming}
+                className="bg-red-500 hover:bg-red-600 text-white font-semibold h-7 text-[11px] px-3 rounded flex items-center"
+              >
+                {isClaiming ? (
+                  <><Loader2 className="w-3 h-3 mr-1 animate-spin" />Claiming...</>
+                ) : (
+                  <>Claim 100 TRUTH</>
+                )}
+              </Button>
+            </div>
           )}
         </div>
       </div>
