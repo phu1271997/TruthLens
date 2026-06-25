@@ -3,8 +3,9 @@ import { studionet } from "genlayer-js/chains";
 
 let _client: ReturnType<typeof createClient> | null = null;
 
-export const CONTRACT_ADDRESS = process.env
-  .NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
+export const CONTRACT_ADDRESS = (process.env
+  .NEXT_PUBLIC_CONTRACT_ADDRESS ||
+  "0x553dF22e2bBCcEABb2D83d9F0b0FFAbBB7b559A7") as `0x${string}`;
 
 export function getClient(): ReturnType<typeof createClient> {
   if (typeof window === "undefined") {
