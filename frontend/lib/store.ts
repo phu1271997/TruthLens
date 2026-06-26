@@ -8,6 +8,7 @@ interface TruthStore {
   address: string; // Will store the full connected address
   isConnected: boolean;
   isConnecting: boolean;
+  isClaiming: boolean;
   connect: () => Promise<void>;
   fetchBalance: (address: string) => Promise<void>;
   addPost: (content: string) => Promise<void>;
@@ -15,6 +16,7 @@ interface TruthStore {
   appealPost: (id: string) => Promise<void>;
   fetchFeed: () => Promise<void>;
   fetchStats: () => Promise<{ post_count: number; total_supply: number; verified: number; flagged: number }>;
+  claimStarterTokens: () => Promise<void>;
 }
 
 function shortAddr(addr: string) {
@@ -38,6 +40,7 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
   address: "",
   isConnected: false,
   isConnecting: false,
+  isClaiming: false,
 
   connect: async () => {
     set({ isConnecting: true });
@@ -53,12 +56,7 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
       const currentBal = get().balance;
       if (currentBal === 0) {
         console.log("New wallet connected. Automatically claiming 100 TRUTH starter tokens...");
-        try {
-          await writeContract("claim_starter_tokens", [], addr);
-          await get().fetchBalance(addr);
-        } catch (err) {
-          console.error("Failed to automatically claim starter tokens:", err);
-        }
+        await get().claimStarterTokens();
       }
     } catch (err: any) {
       console.error("Connect wallet error:", err);
@@ -237,5 +235,31 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
       console.error("Error fetching stats:", err);
     }
     return { post_count: 0, total_supply: 0, verified: 0, flagged: 0 };
+  },
+
+  claimStarterTokens: async () => {
+    const { address, isClaiming } = get();
+    if (!address || isClaiming) return;
+    set({ isClaiming: true });
+    try {
+      console.log("Requesting starter tokens...");
+      await writeContract("claim_starter_tokens", [], address);
+      
+      // Poll the balance every 2 seconds, up to 15 times (30 seconds total)
+      let attempts = 0;
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        await get().fetchBalance(address);
+        const newBal = get().balance;
+        if (newBal > 0 || attempts >= 15) {
+          clearInterval(pollInterval);
+          set({ isClaiming: false });
+        }
+      }, 2000);
+    } catch (err: any) {
+      console.error("Failed to claim starter tokens:", err);
+      set({ isClaiming: false });
+      alert(err.message || "Failed to claim starter tokens. Please try again.");
+    }
   },
 }));

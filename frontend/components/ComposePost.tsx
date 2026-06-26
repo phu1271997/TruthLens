@@ -9,7 +9,7 @@ import { Coins, Send, Loader2 } from "lucide-react";
 export function ComposePost() {
   const [content, setContent] = useState("");
   const [isPosting, setIsPosting] = useState(false);
-  const { balance, addPost, isConnected, connect } = useTruthStore();
+  const { balance, addPost, isConnected, connect, isClaiming, claimStarterTokens } = useTruthStore();
   const stakeAmount = 1;
 
   const handleSubmit = async () => {
@@ -80,8 +80,33 @@ export function ComposePost() {
           </div>
 
           {isConnected && balance < stakeAmount && (
-            <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-xs">
-              Insufficient TRUTH balance to post (requires 1 TRUTH, you have {balance}).
+            <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-xs flex items-center justify-between">
+              <span>
+                Insufficient TRUTH balance to post (requires 1 TRUTH, you have {balance}).
+              </span>
+              {balance === 0 && (
+                <div className="flex-shrink-0 ml-4">
+                  {isClaiming ? (
+                    <Button
+                      disabled
+                      size="sm"
+                      className="bg-amber-600/30 hover:bg-amber-600/30 text-white text-[11px] h-7 px-3 rounded-full flex items-center gap-1.5 border border-amber-500/20 cursor-not-allowed"
+                    >
+                      <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                      Claiming...
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={claimStarterTokens}
+                      size="sm"
+                      className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] h-7 px-3 rounded-full flex items-center gap-1.5 shadow-[0_0_8px_rgba(245,158,11,0.3)] animate-pulse border border-amber-500/30"
+                    >
+                      <Coins className="w-3 h-3 text-amber-400 animate-bounce" />
+                      Claim 100 TRUTH
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

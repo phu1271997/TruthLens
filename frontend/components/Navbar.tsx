@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShieldCheck, Wallet, Loader2 } from "lucide-react";
+import { ShieldCheck, Wallet, Loader2, Coins } from "lucide-react";
 import { useTruthStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 
 export function Navbar() {
   const pathname = usePathname();
-  const { balance, address, isConnected, isConnecting, connect } = useTruthStore();
+  const { balance, address, isConnected, isConnecting, isClaiming, connect, claimStarterTokens } = useTruthStore();
 
   return (
     <nav className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-50">
@@ -45,16 +45,40 @@ export function Navbar() {
           </div>
 
           {isConnected ? (
-            <div className="flex items-center gap-3 bg-slate-800/50 rounded-full py-1.5 px-4 border border-slate-700">
-              <div className="flex items-center gap-1.5 text-amber-400 font-semibold text-sm">
-                <Wallet className="w-4 h-4" />
-                {balance} TRUTH
-              </div>
-              <div className="w-px h-4 bg-slate-700 mx-1" />
-              <div className="text-xs text-slate-400 font-mono">
-                {address && address.length > 10
-                  ? address.slice(0, 6) + "..." + address.slice(-4)
-                  : address}
+            <div className="flex items-center gap-3">
+              {balance === 0 && (
+                <>
+                  {isClaiming ? (
+                    <Button
+                      disabled
+                      className="bg-amber-600/30 text-white rounded-full px-4 h-9 text-xs font-semibold flex items-center gap-1.5 border border-amber-500/20 cursor-not-allowed"
+                    >
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                      Claiming TRUTH...
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={claimStarterTokens}
+                      className="bg-amber-600 hover:bg-amber-700 text-white rounded-full px-4 h-9 text-xs font-semibold flex items-center gap-1.5 shadow-[0_0_10px_rgba(245,158,11,0.3)] animate-pulse border border-amber-500/30"
+                    >
+                      <Coins className="w-3.5 h-3.5 text-amber-400 animate-bounce" />
+                      Claim 100 TRUTH
+                    </Button>
+                  )}
+                </>
+              )}
+              
+              <div className="flex items-center gap-3 bg-slate-800/50 rounded-full py-1.5 px-4 border border-slate-700">
+                <div className="flex items-center gap-1.5 text-amber-400 font-semibold text-sm">
+                  <Wallet className="w-4 h-4" />
+                  {balance} TRUTH
+                </div>
+                <div className="w-px h-4 bg-slate-700 mx-1" />
+                <div className="text-xs text-slate-400 font-mono">
+                  {address && address.length > 10
+                    ? address.slice(0, 6) + "..." + address.slice(-4)
+                    : address}
+                </div>
               </div>
             </div>
           ) : (
