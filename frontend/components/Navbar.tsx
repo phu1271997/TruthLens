@@ -44,21 +44,21 @@ export function Navbar() {
             </Link>
           </div>
 
-          {isConnected ? (
-            <div className="flex items-center gap-3">
-              <Button
-                onClick={claimTokens}
-                disabled={isClaiming}
-                variant="outline"
-                className="border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-full px-4 h-9 text-xs font-semibold flex items-center gap-1.5 transition-all"
-              >
-                {isClaiming ? (
-                  <><Loader2 className="w-3.5 h-3.5 animate-spin" />Claiming...</>
-                ) : (
-                  <>Claim Faucet</>
-                )}
-              </Button>
-              
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={claimTokens}
+              disabled={isClaiming}
+              variant="outline"
+              className="border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-full px-4 h-9 text-xs font-semibold flex items-center gap-1.5 transition-all"
+            >
+              {isClaiming ? (
+                <><Loader2 className="w-3.5 h-3.5 animate-spin" />Claiming...</>
+              ) : (
+                <>Claim Faucet</>
+              )}
+            </Button>
+
+            {isConnected ? (
               <div className="flex items-center gap-3 bg-slate-800/50 rounded-full py-1.5 px-4 border border-slate-700">
                 <div className="flex items-center gap-1.5 text-amber-400 font-semibold text-sm">
                   <Wallet className="w-4 h-4" />
@@ -71,20 +71,20 @@ export function Navbar() {
                     : address}
                 </div>
               </div>
-            </div>
-          ) : (
-            <Button
-              onClick={connect}
-              disabled={isConnecting}
-              className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-5 h-9 text-sm font-semibold"
-            >
-              {isConnecting ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Connecting...</>
-              ) : (
-                <><Wallet className="w-4 h-4 mr-2" />Connect Wallet</>
-              )}
-            </Button>
-          )}
+            ) : (
+              <Button
+                onClick={connect}
+                disabled={isConnecting}
+                className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-5 h-9 text-sm font-semibold"
+              >
+                {isConnecting ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Connecting...</>
+                ) : (
+                  <><Wallet className="w-4 h-4 mr-2" />Connect Wallet</>
+                )}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </nav>

@@ -39,20 +39,6 @@ def normalize_verdict(raw: dict) -> dict:
         "reasoning": str(raw.get("reasoning", "No reasoning provided.")).strip()[:2000],
     }
 
-def verdict_is_valid(data, verdict: dict) -> bool:
-    """Validator check — re-runs leader_fn output validation."""
-    if not isinstance(data, dict):
-        return False
-    if str(data.get("verdict", "")).upper() not in ["TRUE", "FALSE", "MISLEADING", "OPINION", "UNVERIFIABLE"]:
-        return False
-    try:
-        c = int(round(float(data.get("confidence", -1))))
-        if c < 0 or c > 100:
-            return False
-    except Exception:
-        return False
-    return True
-
 # === Main Contract ===
 
 class Contract(gl.Contract):
@@ -60,11 +46,14 @@ class Contract(gl.Contract):
     posts: TreeMap[str, str]              # post_id -> JSON-encoded post
     balances: TreeMap[str, u256]          # address -> $TRUTH balance
     user_posts: TreeMap[str, str]         # address -> JSON list of post_ids
+    post_ids: DynArray[str]               # post IDs in creation order
     total_supply: u256
     token_symbol: str
     post_counter: u256
     initial_grant: u256                   # tokens given to new users
     stake_amount: u256                    # tokens locked per post
+    verified_count: u256                  # count of verified posts
+    flagged_count: u256                   # count of flagged posts
 
     def __init__(self):
         # ONLY primitives here — TreeMaps auto-init to empty
@@ -73,6 +62,8 @@ class Contract(gl.Contract):
         self.post_counter = u256(0)
         self.initial_grant = u256(100)
         self.stake_amount = u256(1)
+        self.verified_count = u256(0)
+        self.flagged_count = u256(0)
 
     @gl.public.write
     def claim_starter_tokens(self) -> str:
@@ -128,6 +119,7 @@ class Contract(gl.Contract):
             "post_number": int(self.post_counter),
         }
         self.posts[post_id] = json.dumps(post, sort_keys=True)
+        self.post_ids.append(post_id)
         
         return json.dumps({
             "status": "posted",
@@ -224,18 +216,21 @@ Output a JSON: {"equivalent": true} or {"equivalent": false}.
             self.balances[author] = self.balances.get(author, u256(0)) + reward_amount
             self.total_supply = self.total_supply + (stake_locked * u256(2))
             post["status"] = "VERIFIED"
+            self.verified_count = self.verified_count + u256(1)
             post["reward_paid"] = int(reward_amount)
         elif verdict["verdict"] == "FALSE" and verdict["confidence"] >= 85:
             # Slash liars: burn the staked tokens
             burned_amount = stake_locked
             self.total_supply = self.total_supply - burned_amount
             post["status"] = "FLAGGED"
+            self.flagged_count = self.flagged_count + u256(1)
         elif verdict["verdict"] == "MISLEADING" and verdict["confidence"] >= 70:
             # Partial slash: keep half, burn half
             burned_amount = stake_locked / u256(2)
             self.balances[author] = self.balances.get(author, u256(0)) + (stake_locked - burned_amount)
             self.total_supply = self.total_supply - burned_amount
             post["status"] = "FLAGGED"
+            self.flagged_count = self.flagged_count + u256(1)
         elif verdict["verdict"] == "OPINION":
             # Return stake — opinions are neither rewarded nor punished
             self.balances[author] = self.balances.get(author, u256(0)) + stake_locked
@@ -359,6 +354,8 @@ Output a JSON: {"equivalent": true} or {"equivalent": false}.
             self.balances[author] = self.balances.get(author, u256(0)) + original_stake + u256(2)
             self.total_supply = self.total_supply + u256(4) # 2 for author, 2 for appealer minted
             post["status"] = "VERIFIED"
+            self.flagged_count = self.flagged_count - u256(1)
+            self.verified_count = self.verified_count + u256(1)
             post["reward_paid"] = int(original_stake + u256(2))
         else:
             # Appeal failed! The original FLAGGED/OPINION status is upheld, or updated to the new verdict.
@@ -369,6 +366,7 @@ Output a JSON: {"equivalent": true} or {"equivalent": false}.
                 post["status"] = "FLAGGED"
             elif verdict["verdict"] == "OPINION":
                 post["status"] = "OPINION"
+                self.flagged_count = self.flagged_count - u256(1)
             else:
                 post["status"] = "FLAGGED"
         
@@ -400,6 +398,36 @@ Output a JSON: {"equivalent": true} or {"equivalent": false}.
         if post_raw == "":
             raise gl.vm.UserError("Unknown post_id")
         return post_raw
+
+    @gl.public.view
+    def list_recent_posts(self, limit: u256, offset: u256) -> str:
+        """Return JSON array of posts newest-first. limit max 50."""
+        total = len(self.post_ids)
+        lim = min(int(limit), 50)
+        off = int(offset)
+        if off >= total:
+            return json.dumps([])
+        # Iterate newest -> oldest
+        start = total - 1 - off
+        end = max(-1, start - lim)
+        result = []
+        i = start
+        while i > end:
+            pid = self.post_ids[i]
+            raw = self.posts.get(pid, "")
+            if raw:
+                result.append(json.loads(raw))
+            i -= 1
+        return json.dumps(result)
+
+    @gl.public.view
+    def get_feed_stats(self) -> str:
+        return json.dumps({
+            "post_count": int(self.post_counter),
+            "total_supply": int(self.total_supply),
+            "verified_count": int(self.verified_count),
+            "flagged_count": int(self.flagged_count),
+        })
 
     @gl.public.view
     def get_balance(self, address: str) -> u256:

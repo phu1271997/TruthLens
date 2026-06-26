@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { Post, MOCK_POSTS, Verdict } from "./mockData";
+import { Post, Verdict } from "./mockData";
 import { readContract, writeContract, connectWallet, getAccount } from "./genlayer";
 
 interface TruthStore {
@@ -15,6 +15,8 @@ interface TruthStore {
   addPost: (content: string) => Promise<void>;
   verifyPost: (id: string) => Promise<void>;
   appealPost: (id: string) => Promise<void>;
+  fetchFeed: () => Promise<void>;
+  fetchStats: () => Promise<{ post_count: number; total_supply: number; verified: number; flagged: number }>;
 }
 
 function shortAddr(addr: string) {
@@ -33,7 +35,7 @@ const mapStatus = (status: string, verdict: string): Verdict => {
 };
 
 export const useTruthStore = create<TruthStore>((set, get) => ({
-  posts: [...MOCK_POSTS],
+  posts: [],
   balance: 0,
   address: "",
   isConnected: false,
@@ -80,10 +82,20 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
   },
 
   claimTokens: async () => {
-    const { address, isConnected } = get();
+    let { address, isConnected } = get();
     if (!isConnected || !address || address === "undefined" || address === "null") {
-      alert("Please connect your wallet first.");
-      return;
+      try {
+        await get().connect();
+        const state = get();
+        address = state.address;
+        isConnected = state.isConnected;
+        if (!isConnected || !address || address === "undefined" || address === "null") {
+          return;
+        }
+      } catch (err) {
+        console.error("Auto-connect before faucet claim failed:", err);
+        return;
+      }
     }
     set({ isClaiming: true });
     try {
@@ -127,6 +139,7 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
     // On-chain write
     try {
       await writeContract("create_post", [content, postId], get().address);
+      await get().fetchFeed();
     } catch (err: any) {
       console.error("create_post error:", err);
       // Revert optimistic update on error
@@ -144,50 +157,9 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
       return;
     }
     try {
-      const result = await writeContract("verify_post", [id], address);
-      let parsed: any = null;
-      if (typeof result === "string") {
-        try {
-          parsed = JSON.parse(result);
-        } catch {}
-      } else if (result && typeof result === "object") {
-        parsed = result;
-      }
-
-      if (parsed && parsed.verdict) {
-        const v = parsed.verdict;
-        set((state) => ({
-          posts: state.posts.map((p) => {
-            if (p.id !== id) return p;
-            return {
-              ...p,
-              status: mapStatus(parsed.status, v.verdict),
-              confidence: v.confidence ?? 0,
-              reasoning: v.reasoning ?? "Verified on-chain.",
-              evidence_urls: v.evidence_urls ?? [],
-            };
-          }),
-          balance: parsed.author_balance != null ? parsed.author_balance : state.balance,
-        }));
-      } else {
-        // Fallback: fetch post from chain
-        const postRaw = await readContract("get_post", [id]);
-        if (typeof postRaw === "string") {
-          const post = JSON.parse(postRaw);
-          set((state) => ({
-            posts: state.posts.map((p) => {
-              if (p.id !== id) return p;
-              return {
-                ...p,
-                status: mapStatus(post.status, post.verdict),
-                confidence: post.confidence ?? 0,
-                reasoning: post.reasoning ?? "Verified on-chain.",
-                evidence_urls: post.evidence_urls ?? [],
-              };
-            }),
-          }));
-        }
-      }
+      await writeContract("verify_post", [id], address);
+      await get().fetchFeed();
+      await get().fetchBalance(address);
     } catch (err: any) {
       console.error("verify_post error:", err);
     }
@@ -206,64 +178,9 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
     }));
 
     try {
-      const result = await writeContract("appeal_verdict", [id], address);
-      let parsed: any = null;
-      if (typeof result === "string") {
-        try {
-          parsed = JSON.parse(result);
-        } catch {}
-      } else if (result && typeof result === "object") {
-        parsed = result;
-      }
-
-      if (parsed && parsed.verdict) {
-        const v = parsed.verdict;
-        set((state) => ({
-          posts: state.posts.map((p) => {
-            if (p.id !== id) return p;
-            return {
-              ...p,
-              status: mapStatus(parsed.status, v.verdict),
-              confidence: v.confidence ?? 0,
-              reasoning: `[APPEAL RESOLVED] ${v.reasoning ?? ""}`,
-              evidence_urls: v.evidence_urls ?? [],
-              is_appealed: true,
-              appeal_verdict: v.verdict,
-              appeal_confidence: v.confidence,
-              appeal_reasoning: v.reasoning,
-              appeal_evidence_urls: v.evidence_urls,
-              appeal_stake_locked: 5,
-            };
-          }),
-          balance: parsed.appealer_balance != null ? parsed.appealer_balance : state.balance,
-        }));
-      } else {
-        // Fallback: fetch from chain
-        const postRaw = await readContract("get_post", [id]);
-        if (typeof postRaw === "string") {
-          const post = JSON.parse(postRaw);
-          set((state) => ({
-            posts: state.posts.map((p) => {
-              if (p.id !== id) return p;
-              return {
-                ...p,
-                status: mapStatus(post.status, post.verdict),
-                confidence: post.confidence ?? 0,
-                reasoning: post.reasoning ?? "Verified on-chain.",
-                evidence_urls: post.evidence_urls ?? [],
-                is_appealed: post.is_appealed ?? false,
-                appeal_verdict: post.appeal_verdict,
-                appeal_confidence: post.appeal_confidence,
-                appeal_reasoning: post.appeal_reasoning,
-                appeal_evidence_urls: post.appeal_evidence_urls,
-                appeal_stake_locked: post.appeal_stake_locked,
-              };
-            }),
-          }));
-          // Refresh balance
-          await get().fetchBalance(address);
-        }
-      }
+      await writeContract("appeal_verdict", [id], address);
+      await get().fetchFeed();
+      await get().fetchBalance(address);
     } catch (err: any) {
       console.error("appealPost error:", err);
       // Revert status to FALSE (which maps to FLAGGED / Red badge) on error
@@ -272,5 +189,86 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
       }));
       alert(err.message || "Failed to appeal verdict. Make sure you have at least 5 TRUTH tokens.");
     }
+  },
+
+  fetchFeed: async () => {
+    try {
+      const raw = await readContract("list_recent_posts", [50, 0]);
+      if (typeof raw === "string" && raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const getAvatarGradient = (address: string) => {
+            const gradients = [
+              "from-blue-500 to-cyan-500",
+              "from-emerald-400 to-teal-500",
+              "from-red-500 to-orange-500",
+              "from-amber-400 to-yellow-600",
+              "from-purple-500 to-pink-500",
+              "from-indigo-500 to-purple-500",
+              "from-pink-500 to-rose-500",
+            ];
+            let hash = 0;
+            for (let i = 0; i < address.length; i++) {
+              hash = address.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            const index = Math.abs(hash) % gradients.length;
+            return gradients[index];
+          };
+
+          const mapped = parsed.map((p: any) => {
+            let createdAt = Date.now();
+            const match = p.id?.match(/^post_(\d+)$/);
+            if (match) {
+              createdAt = parseInt(match[1], 10);
+            } else {
+              createdAt = Date.now() - 1000 * 60 * 60 * (p.post_number || 1);
+            }
+
+            return {
+              id: p.id,
+              author: {
+                address: p.author ? shortAddr(p.author) : "0xUnknown",
+                avatarGradient: getAvatarGradient(p.author || ""),
+              },
+              content: p.content,
+              status: mapStatus(p.status, p.verdict),
+              confidence: p.confidence,
+              reasoning: p.reasoning,
+              evidence_urls: p.evidence_urls,
+              stake_locked: p.stake_locked,
+              reward_paid: p.reward_paid,
+              createdAt,
+              is_appealed: p.is_appealed,
+              appeal_verdict: p.appeal_verdict,
+              appeal_confidence: p.appeal_confidence,
+              appeal_reasoning: p.appeal_reasoning,
+              appeal_evidence_urls: p.appeal_evidence_urls,
+              appeal_stake_locked: p.appeal_stake_locked,
+            };
+          });
+          set({ posts: mapped });
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching feed:", err);
+    }
+  },
+
+  fetchStats: async () => {
+    try {
+      const raw = await readContract("get_feed_stats", []);
+      if (typeof raw === "string" && raw) {
+        const parsed = JSON.parse(raw);
+        return {
+          post_count: Number(parsed.post_count || 0),
+          total_supply: Number(parsed.total_supply || 0),
+          verified: Number(parsed.verified_count || 0),
+          flagged: Number(parsed.flagged_count || 0),
+        };
+      }
+    } catch (err) {
+      console.error("Error fetching stats:", err);
+    }
+    return { post_count: 0, total_supply: 0, verified: 0, flagged: 0 };
   },
 }));

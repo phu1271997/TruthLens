@@ -7,7 +7,7 @@ const envAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
 export const CONTRACT_ADDRESS = (
   envAddress && envAddress !== "undefined" && envAddress !== "null"
     ? envAddress
-    : "0x553dF22e2bBCcEABb2D83d9F0b0FFAbBB7b559A7"
+    : "0xE4a9eca725783ff209e4971d944056B0bea4D9BE"
 ) as `0x${string}`;
 
 export function getClient(): ReturnType<typeof createClient> {
@@ -16,7 +16,7 @@ export function getClient(): ReturnType<typeof createClient> {
     if (!_client) {
       _client = createClient({
         chain: studionet,
-        endpoint: "https://studio.genlayer.com/rpc",
+        endpoint: "https://studio.genlayer.com/api",
       } as any);
     }
     return _client;
@@ -28,7 +28,7 @@ export function getClient(): ReturnType<typeof createClient> {
   _client = createClient({
     chain: studionet,
     provider,
-    endpoint: "https://studio.genlayer.com/rpc",
+    endpoint: "https://studio.genlayer.com/api",
   } as any);
   return _client;
 }
@@ -62,7 +62,7 @@ export async function connectWallet(): Promise<`0x${string}`> {
           {
             chainId: "0x4D2",
             chainName: "GenLayer Studio",
-            rpcUrls: ["https://studio.genlayer.com/rpc"],
+            rpcUrls: ["https://studio.genlayer.com/api"],
             nativeCurrency: { name: "GEN", symbol: "GEN", decimals: 18 },
             blockExplorerUrls: ["https://studio.genlayer.com/explorer"],
           },

@@ -1,11 +1,36 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ShieldCheck, ArrowRight, Activity, Users, Coins } from "lucide-react";
+import { ShieldAlert, ArrowRight, Activity, Coins } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTruthStore } from "@/lib/store";
 
 export default function LandingPage() {
+  const fetchStats = useTruthStore(state => state.fetchStats);
+  const [stats, setStats] = useState<{ post_count: number; total_supply: number; verified: number; flagged: number } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchStats().then(res => {
+      setStats(res);
+      setLoading(false);
+    });
+  }, [fetchStats]);
+
+  const renderStatValue = (val: number | undefined) => {
+    if (loading || val === undefined) {
+      return (
+        <span className="inline-block animate-pulse text-slate-500 font-mono">
+          —
+        </span>
+      );
+    }
+    return val.toLocaleString();
+  };
+
   return (
     <div className="overflow-hidden">
       {/* Hero Section */}
@@ -53,18 +78,24 @@ export default function LandingPage() {
         <div className="max-w-5xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
           <div className="p-6">
             <Activity className="w-8 h-8 text-blue-400 mx-auto mb-4" />
-            <div className="text-4xl font-bold text-white mb-2">1,248</div>
+            <div className="text-4xl font-bold text-white mb-2 min-h-[44px] flex items-center justify-center">
+              {renderStatValue(stats ? stats.verified + stats.flagged : undefined)}
+            </div>
             <div className="text-sm text-slate-400 uppercase tracking-wider font-semibold">Claims Verified</div>
           </div>
           <div className="p-6">
-            <ShieldCheck className="w-8 h-8 text-emerald-400 mx-auto mb-4" />
-            <div className="text-4xl font-bold text-white mb-2">89%</div>
-            <div className="text-sm text-slate-400 uppercase tracking-wider font-semibold">Misinformation Prevented</div>
+            <ShieldAlert className="w-8 h-8 text-emerald-400 mx-auto mb-4" />
+            <div className="text-4xl font-bold text-white mb-2 min-h-[44px] flex items-center justify-center">
+              {renderStatValue(stats ? stats.flagged : undefined)}
+            </div>
+            <div className="text-sm text-slate-400 uppercase tracking-wider font-semibold">Posts Flagged</div>
           </div>
           <div className="p-6">
             <Coins className="w-8 h-8 text-amber-400 mx-auto mb-4" />
-            <div className="text-4xl font-bold text-white mb-2">45K</div>
-            <div className="text-sm text-slate-400 uppercase tracking-wider font-semibold">TRUTH Distributed</div>
+            <div className="text-4xl font-bold text-white mb-2 min-h-[44px] flex items-center justify-center">
+              {renderStatValue(stats ? stats.total_supply : undefined)}
+            </div>
+            <div className="text-sm text-slate-400 uppercase tracking-wider font-semibold">TRUTH Supply</div>
           </div>
         </div>
       </section>

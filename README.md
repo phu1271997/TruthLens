@@ -45,8 +45,16 @@ gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
 1. Clone the repo
 2. `cd frontend`
 3. `npm install`
-4. `npm run dev`
-5. Open `http://localhost:3000`
+4. Copy `.env.example` to `.env` (or `.env.local`) and configure your deployed contract address `NEXT_PUBLIC_CONTRACT_ADDRESS`
+5. Run the dev server:
+   ```bash
+   npm run dev
+   ```
+6. Seed the demo posts on-chain (requires a private key with a small amount of GEN to pay for gas, or claim starter tokens directly):
+   ```bash
+   npx tsx scripts/seed_demo_posts.ts <private_key>
+   ```
+7. Open `http://localhost:3000`
 
 ## GenLayer Contract Deployment Guide
 To deploy the contracts to GenLayer Studio:
