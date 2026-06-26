@@ -8,10 +8,8 @@ interface TruthStore {
   address: string; // Will store the full connected address
   isConnected: boolean;
   isConnecting: boolean;
-  isClaiming: boolean;
   connect: () => Promise<void>;
   fetchBalance: (address: string) => Promise<void>;
-  claimTokens: () => Promise<void>;
   addPost: (content: string) => Promise<void>;
   verifyPost: (id: string) => Promise<void>;
   appealPost: (id: string) => Promise<void>;
@@ -40,7 +38,6 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
   address: "",
   isConnected: false,
   isConnecting: false,
-  isClaiming: false,
 
   connect: async () => {
     set({ isConnecting: true });
@@ -49,9 +46,20 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
       if (!addr || (addr as string) === "undefined" || (addr as string) === "null") {
         throw new Error("No valid account returned from wallet.");
       }
-      // Store the full address instead of the shortened one
       set({ address: addr, isConnected: true });
       await get().fetchBalance(addr);
+
+      // Automatically give 100 TRUTH on connection if balance is 0
+      const currentBal = get().balance;
+      if (currentBal === 0) {
+        console.log("New wallet connected. Automatically claiming 100 TRUTH starter tokens...");
+        try {
+          await writeContract("claim_starter_tokens", [], addr);
+          await get().fetchBalance(addr);
+        } catch (err) {
+          console.error("Failed to automatically claim starter tokens:", err);
+        }
+      }
     } catch (err: any) {
       console.error("Connect wallet error:", err);
     } finally {
@@ -66,43 +74,6 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
       set({ balance: Number(raw) });
     } catch {
       // fallback
-    }
-  },
-
-  claimTokens: async () => {
-    let { address, isConnected } = get();
-    if (!isConnected || !address || address === "undefined" || address === "null") {
-      try {
-        await get().connect();
-        // Wait a brief moment for the provider and state store to fully propagate the account address
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        const state = get();
-        address = state.address;
-        isConnected = state.isConnected;
-        if (!isConnected || !address || address === "undefined" || address === "null") {
-          return;
-        }
-      } catch (err) {
-        console.error("Auto-connect before faucet claim failed:", err);
-        return;
-      }
-    }
-    set({ isClaiming: true });
-    try {
-      // Robustly fetch the latest address directly from the provider or the store
-      const activeAddress = getAccount() || address;
-      if (!activeAddress || activeAddress === "undefined" || activeAddress === "null") {
-        throw new Error("No active wallet account found. Please connect your wallet.");
-      }
-
-      await writeContract("claim_starter_tokens", [], activeAddress);
-      // Re-fetch balance
-      await get().fetchBalance(activeAddress);
-    } catch (err: any) {
-      console.error("Claim tokens error:", err);
-      alert(err.message || "Failed to claim tokens. Make sure your balance is <= 5 TRUTH.");
-    } finally {
-      set({ isClaiming: false });
     }
   },
 
