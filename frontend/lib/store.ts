@@ -52,18 +52,6 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
       // Store the full address instead of the shortened one
       set({ address: addr, isConnected: true });
       await get().fetchBalance(addr);
-
-      // Try to claim starter tokens automatically if balance is 0 on first connect
-      const raw = await readContract("get_balance", [addr]).catch(() => null);
-      const bal = raw ? Number(raw) : 0;
-      if (bal === 0) {
-        try {
-          await writeContract("claim_starter_tokens", [], addr);
-          await get().fetchBalance(addr);
-        } catch {
-          // Already claimed or failed silently
-        }
-      }
     } catch (err: any) {
       console.error("Connect wallet error:", err);
     } finally {
@@ -86,6 +74,8 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
     if (!isConnected || !address || address === "undefined" || address === "null") {
       try {
         await get().connect();
+        // Wait a brief moment for the provider and state store to fully propagate the account address
+        await new Promise((resolve) => setTimeout(resolve, 500));
         const state = get();
         address = state.address;
         isConnected = state.isConnected;
@@ -99,9 +89,15 @@ export const useTruthStore = create<TruthStore>((set, get) => ({
     }
     set({ isClaiming: true });
     try {
-      await writeContract("claim_starter_tokens", [], address);
+      // Robustly fetch the latest address directly from the provider or the store
+      const activeAddress = getAccount() || address;
+      if (!activeAddress || activeAddress === "undefined" || activeAddress === "null") {
+        throw new Error("No active wallet account found. Please connect your wallet.");
+      }
+
+      await writeContract("claim_starter_tokens", [], activeAddress);
       // Re-fetch balance
-      await get().fetchBalance(address);
+      await get().fetchBalance(activeAddress);
     } catch (err: any) {
       console.error("Claim tokens error:", err);
       alert(err.message || "Failed to claim tokens. Make sure your balance is <= 5 TRUTH.");

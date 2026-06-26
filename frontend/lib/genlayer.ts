@@ -102,7 +102,15 @@ export async function writeContract(
     throw new Error("Contract address not set or is invalid");
   }
   const client = getClient();
-  const activeAccount = account || getAccount();
+  let activeAccount = account || getAccount();
+  
+  // Fallback to direct selectedAddress check in case of propagation delay
+  if (!activeAccount || (activeAccount as string) === "undefined" || (activeAccount as string) === "null") {
+    const w = window as any;
+    if (w.ethereum?.selectedAddress) {
+      activeAccount = w.ethereum.selectedAddress;
+    }
+  }
   
   const options: any = {
     address: CONTRACT_ADDRESS,
@@ -110,8 +118,10 @@ export async function writeContract(
     args,
   };
   
-  if (activeAccount && activeAccount !== "undefined" && activeAccount !== "null") {
+  if (activeAccount && (activeAccount as string) !== "undefined" && (activeAccount as string) !== "null") {
     options.account = activeAccount;
+  } else {
+    throw new Error("No active wallet account found. Please connect your wallet.");
   }
   
   return (client as any).writeContract(options);
